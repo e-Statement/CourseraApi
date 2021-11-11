@@ -2,11 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Microsoft.VisualBasic.FileIO;
-using Serilog;
 using Server.Logic;
 using Server.Managers.Interfaces;
 using Server.Models;
@@ -273,12 +269,13 @@ namespace Server.Managers
 
         private Assignment CreateAssignmentWithoutStudentId(string[] row)
         {
+            var attemptGradeParsed = double.TryParse(row[10].Replace('.', ','), out var attemptGrade);
             var attemptTimestampParsed = DateTime.TryParse(row[13], culture, dateTimeStyle, out var attemptTimestamp);
             var gradeAfterOverrideParsed = double.TryParse(row[11].Replace('.',','), out var gradeAfterOverride);
             return new Assignment
             {
                 Title = row[8],
-                AttemptGrade = double.Parse(row[10].Replace('.',',')),
+                AttemptGrade = attemptGradeParsed ? attemptGrade : 0,
                 AttemptTimestamp = attemptTimestampParsed ? attemptTimestamp : null,
                 GradeAfterOverride = gradeAfterOverrideParsed ? gradeAfterOverride : null,
                 IsAttemptPassed = row[12] == "Yes",
