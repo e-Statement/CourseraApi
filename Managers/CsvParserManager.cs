@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
+using Serilog;
 using Server.Logic;
 using Server.Managers.Interfaces;
 using Server.Models;
@@ -12,32 +13,19 @@ namespace Server.Managers
 {
     public class CsvParserManager : ICsvParserManager
     {
-        private readonly IStudentRepository _studentRepository;
-        private readonly ISpecializationRepository _specializationRepository;
-        private readonly ICourseRepository _courseRepository;
         private readonly IAssignmentRepository _assignmentRepository;
+        private readonly ICourseRepository _courseRepository;
+        private readonly ISpecializationRepository _specializationRepository;
+        private readonly IStudentRepository _studentRepository;
 
-        public CsvParserManager(IStudentRepository studentRepository, ISpecializationRepository specializationRepository, ICourseRepository courseRepository, IAssignmentRepository assignmentRepository)
+        public CsvParserManager(IStudentRepository studentRepository,
+            ISpecializationRepository specializationRepository, ICourseRepository courseRepository,
+            IAssignmentRepository assignmentRepository)
         {
             _studentRepository = studentRepository;
             _specializationRepository = specializationRepository;
             _courseRepository = courseRepository;
             _assignmentRepository = assignmentRepository;
-        }
-
-        public Task<List<string[]>> ParseCsvFileAsync(string delimeter, string file)
-        {
-            var result = new List<string[]>();
-            foreach (string row in file.Split('\n').Skip(1))
-            {
-                string[] values = row
-                    .Split($"\"{delimeter}\"")
-                    .Select(str => str.Trim('\"'))
-                    .ToArray();
-                result.Add(values);
-            }
-
-            return Task.FromResult(result);
         }
 
         public async Task<OperationResult<List<Student>>> ParseStudentsCsvToStudents(string file)
@@ -48,18 +36,12 @@ namespace Server.Managers
             foreach (var row in rows.Where(x => x.Length > 1))
             {
                 var name = row[0];
-                if (existingStudents.Any(student => student.FullName == name))
-                {
-                    continue;
-                }
+                if (existingStudents.Any(student => student.FullName == name)) continue;
                 var group = row[2];
                 var enrolledCourses = int.Parse(row[5]);
                 var completedCourses = int.Parse(row[6]);
                 var memberState = row[7];
-                if (name == "ANONYMIZED_NAME" || string.IsNullOrEmpty(name))
-                {
-                    continue;
-                }
+                if (name == "ANONYMIZED_NAME" || string.IsNullOrEmpty(name)) continue;
                 var student = new Student
                 {
                     FullName = name,
@@ -70,14 +52,11 @@ namespace Server.Managers
                 };
 
                 if (!students.ContainsKey(name))
-                {
                     students.Add(name, student);
-                }
                 else
-                {
                     students[row[0]] = student;
-                }
             }
+
             var result = students.Values.GroupBy(stud => stud.FullName).Select(stud => stud.First()).ToList();
             return OperationResult<List<Student>>.Success(result);
         }
@@ -88,22 +67,17 @@ namespace Server.Managers
             var students = await _studentRepository.GetAllAsync();
             var rows = await ParseCsvFileAsync(",", file);
             var existingSpecializations = await _specializationRepository.GetAllAsync();
-            foreach (var row in rows.Where(row=>row.Length>1))
+            foreach (var row in rows.Where(row => row.Length > 1))
             {
                 var name = row[0];
-                if (name == "ANONYMIZED_NAME" || string.IsNullOrEmpty(name))
-                {
-                    continue;
-                }
+                if (name == "ANONYMIZED_NAME" || string.IsNullOrEmpty(name)) continue;
                 if (result.ContainsKey(name))
                 {
                     var specialization = CreateSpecializationWithoutStudentId(row);
                     specialization.StudentId = result[name][0].StudentId;
                     if (existingSpecializations.Any(existingSpecialization =>
                         existingSpecialization.Equals(specialization)))
-                    {
                         continue;
-                    }
                     result[name].Add(specialization);
                 }
                 else
@@ -111,7 +85,7 @@ namespace Server.Managers
                     var student = students.FirstOrDefault(student => student.FullName == name);
                     if (student == null)
                     {
-                        Serilog.Log.Warning($"There is no student {name}. Skipping");
+                        Log.Warning($"There is no student {name}. Skipping");
                         continue;
                     }
 
@@ -119,15 +93,14 @@ namespace Server.Managers
                     specialization.StudentId = student.Id;
                     if (existingSpecializations.Any(existingSpecialization =>
                         existingSpecialization.Equals(specialization)))
-                    {
                         continue;
-                    }
-                    result.Add(name, new List<Specialization>()
+                    result.Add(name, new List<Specialization>
                     {
                         specialization
                     });
                 }
             }
+
             var res = result.Values.SelectMany(specs => specs).ToList();
             return OperationResult<List<Specialization>>.Success(res);
         }
@@ -139,21 +112,18 @@ namespace Server.Managers
             var students = await _studentRepository.GetAllAsync();
             var specializations = await _specializationRepository.GetAllAsync();
             var rows = await ParseCsvFileAsync(",", file);
-            foreach (var row in rows.Where(row=>row.Length>1))
+            foreach (var row in rows.Where(row => row.Length > 1))
             {
                 var name = row[0];
                 var course = CreateCourseWithoutStudentIdSpecId(row);
-                if (existingCourses.Any(existingCourse => existingCourse.Equals(course)))
-                {
-                    continue;
-                }
+                if (existingCourses.Any(existingCourse => existingCourse.Equals(course))) continue;
                 if (result.ContainsKey(name))
                 {
                     course.StudentId = result[name][0].StudentId;
-                    
+
                     var specialization = specializations.FirstOrDefault(spec =>
                         spec.University == course.University && spec.StudentId == course.StudentId);
-                    
+
                     if (specialization != null)
                         course.SpecializationId = specialization.Id;
 
@@ -164,66 +134,74 @@ namespace Server.Managers
                     var student = students.FirstOrDefault(student => student.FullName == name);
                     if (student == null)
                     {
-                        Serilog.Log.Warning($"There was no student with name {name} db. Skipping this course");
+                        Log.Warning($"There was no student with name {name} db. Skipping this course");
                         continue;
                     }
 
                     var specialization = specializations.FirstOrDefault(spec =>
                         spec.University == course.University && spec.StudentId == student.Id);
-                    
+
                     course.StudentId = student.Id;
                     if (specialization == null)
                     {
-                        
-                        result.Add(name, new List<Course>() {course});
+                        result.Add(name, new List<Course> { course });
                     }
                     else
                     {
                         course.SpecializationId = specialization.Id;
-                        result.Add(name, new List<Course>() {course});
+                        result.Add(name, new List<Course> { course });
                     }
                 }
             }
-            
+
             var res = result.SelectMany(courses => courses.Value).ToList();
             return OperationResult<List<Course>>.Success(res);
         }
 
         public async Task<OperationResult<List<Assignment>>> ParseAssignmentCsvToAssignments(string file)
         {
-            var rows = await ParseCsvFileAsync(",",file);
+            var rows = await ParseCsvFileAsync(",", file);
             var students = await _studentRepository.GetAllAsync();
             var courses = await _courseRepository.GetAllAsync();
             var assignments = await _assignmentRepository.GetAllAsync();
             var result = new Dictionary<string, List<Assignment>>();
-            foreach (var row in rows.Where(row=>row.Length>1))
+            foreach (var row in rows.Where(row => row.Length > 1))
             {
                 var studentName = row[3];
                 var student = students.FirstOrDefault(student => student.FullName == studentName);
                 if (student is null)
                 {
-                    Serilog.Log.Warning($"There was no student with name {studentName}. Skipping this assignment");
+                    Log.Warning($"There was no student with name {studentName}. Skipping this assignment");
                     continue;
                 }
 
                 var assignment = CreateAssignmentWithoutStudentId(row);
                 assignment.StudentId = student.Id;
-                if (assignments.Exists(assignm => assignm.Equals(assignment)))
-                {
-                    continue;
-                }
+                if (assignments.Exists(assignm => assignm.Equals(assignment))) continue;
                 if (result.ContainsKey(studentName))
-                {
                     result[studentName].Add(assignment);
-                }
                 else
-                {
-                    result[studentName] = new List<Assignment>() {assignment};
-                }
+                    result[studentName] = new List<Assignment> { assignment };
             }
+
             var res = result.Values.SelectMany(value => value).ToList();
 
             return OperationResult<List<Assignment>>.Success(res);
+        }
+
+        public Task<List<string[]>> ParseCsvFileAsync(string delimeter, string file)
+        {
+            var result = new List<string[]>();
+            foreach (var row in file.Split('\n').Skip(1))
+            {
+                var values = row
+                    .Split($"\"{delimeter}\"")
+                    .Select(str => str.Trim('\"'))
+                    .ToArray();
+                result.Add(values);
+            }
+
+            return Task.FromResult(result);
         }
 
         private Specialization CreateSpecializationWithoutStudentId(string[] row)
@@ -273,7 +251,7 @@ namespace Server.Managers
 
             var attemptGradeParsed = TryParseDouble(row[10], out var attemptGrade);
             var gradeAfterOverrideParsed = TryParseDouble(row[11], out var gradeAfterOverride);
-            
+
             return new Assignment
             {
                 Title = row[8],
@@ -287,10 +265,14 @@ namespace Server.Managers
             };
         }
 
-        private static bool TryParseDate(string value, out DateTime result) =>
-            DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
-        
-        private static bool TryParseDouble(string value, out double result) =>
-            double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out result);
+        private static bool TryParseDate(string value, out DateTime result)
+        {
+            return DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
+        }
+
+        private static bool TryParseDouble(string value, out double result)
+        {
+            return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out result);
+        }
     }
 }
