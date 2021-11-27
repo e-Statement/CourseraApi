@@ -255,7 +255,7 @@ namespace Server.Managers
             return new Assignment
             {
                 Title = row[8],
-                AttemptGrade = attemptGradeParsed ? attemptGrade : 0,
+                AttemptGrade = attemptGradeParsed ? attemptGrade : null,
                 AttemptTimestamp = attemptTimestampParsed ? attemptTimestamp : null,
                 GradeAfterOverride = gradeAfterOverrideParsed ? gradeAfterOverride : null,
                 IsAttemptPassed = row[12] == "Yes",
