@@ -12,13 +12,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using server.Managers;
 using Server.Managers;
+using server.Managers.Interfaces;
 using Server.Managers.Interfaces;
 using Server.Profiles;
 using server.Repository;
 using Server.Repository;
 using Server.Repository.Interfaces;
 using Server.Settings;
+using server.Validators;
 
 namespace Server
 {
@@ -62,18 +65,23 @@ namespace Server
                 .AddTransient<ICourseRepository, CourseRepository>()
                 .AddTransient<IAssignmentRepository, AssignmentRepository>()
                 .AddTransient<IFileRepository, FileRepository>()
-                .AddSingleton<UserRepository, UserRepository>();
+                .AddSingleton<UserRepository, UserRepository>()
+                .AddSingleton<IFileUpdater, FileUpdater>();
 
             //Managers
             services
                 .AddTransient<ICsvParserManager, CsvParserManager>()
                 .AddTransient<IUploadManager, UploadManager>()
                 .AddTransient<IDataManager, DataManager>()
-                .AddTransient<IUnloadManager, UnloadManager>();
+                .AddTransient<IUnloadManager, UnloadManager>()
+                .AddTransient<IUpdateManager, UpdateManager>();
             
             //Настройки
             services
                 .AddTransient<IAppSettings, AppSettings>();
+
+            services
+                .AddSingleton<IFileValidator, FileValidator>();
 
             var mapperConfig = new MapperConfiguration(mc =>
             {
