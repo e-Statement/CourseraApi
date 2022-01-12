@@ -8,6 +8,7 @@ using Server.Managers.Interfaces;
 using Server.Repository.Interfaces;
 using Server.Settings;
 using Aspose.Cells;
+using Server.Services;
 
 namespace Server.Managers
 {
@@ -27,125 +28,20 @@ namespace Server.Managers
             _appSettings = appSettings;
         }
         
-        public async Task<OperationResult> UnloadBySpecializationAsync(List<string> specializationTitles)
+        public async Task<OperationResult> UnloadAsync(List<string> courses, List<string> specializationTitles)
         {
-            var sheetsIndex = 0;
+            var coursesWorksheetAppender =
+                new CoursesWorksheetAppender(_courseRepository, _studentRepository, _appSettings);
+            var specializationWorksheetAppender = new SpecializationWorksheetAppender(_courseRepository,
+                _studentRepository, _specializationRepository, _appSettings);
             var workbook = new Workbook();
-            var sheet = workbook.Worksheets[sheetsIndex];
+            if(courses.Count > 0)
+                await coursesWorksheetAppender.Append(workbook, courses);
             foreach (var specializationTitle in specializationTitles)
-            {
-                var getSpecializationsResult = await _specializationRepository.GetByTitleAsync(specializationTitle);
-                if (!getSpecializationsResult.IsSuccess)
-                {
-                    return OperationResult.Error(getSpecializationsResult.ErrorText);
-                }
-
-                var specializations = getSpecializationsResult.Data;
-                var possibleCoursesCount = new Dictionary<string, int>();
-                List<string> possibleCourses;
-                foreach (var specialization in specializations)
-                {
-                    var getCourses = await _courseRepository.GetBySpecializationIdAsync(specialization.Id);
-                    if (getCourses.IsSuccess)
-                    {
-                        foreach (var course in getCourses.Data)
-                        {
-                            if (!possibleCoursesCount.ContainsKey(course.Title))
-                            {
-                                possibleCoursesCount.Add(course.Title, 0);
-                            }
-
-                            possibleCoursesCount[course.Title]++;
-                        }
-                    }
-                }
-
-                if (specializations.Count > 5)
-                    possibleCourses = possibleCoursesCount.Where(keyValue => keyValue.Value > 5)
-                        .Select(keyValue => keyValue.Key).ToList();
-                else
-                {
-                    possibleCourses = possibleCoursesCount.Select(keyValue => keyValue.Key).ToList();
-                }
-
-                //appending header
-                var cell = sheet.Cells[0, 0];
-                cell.PutValue("ФИО студента");
-                for (var i = 0; i < possibleCourses.Count; i++)
-                {
-                    cell = sheet.Cells[0, i + 1];
-                    cell.PutValue(possibleCourses.ElementAt(i));
-                }
-
-                var row = 1;
-                var column = 0;
-                foreach (var specialization in specializations)
-                {
-                    var student = await _studentRepository.GetAsync(specialization.StudentId);
-                    var courses = await _courseRepository.GetBySpecializationIdAsync(specialization.Id);
-                    if (!courses.IsSuccess)
-                        continue;
-                    cell = sheet.Cells[row, column];
-                    cell.PutValue(student.Data.FullName);
-                    column++;
-                    for (int i = 0; i < possibleCourses.Count; i++)
-                    {
-                        var course = courses.Data.FirstOrDefault(crs => crs.Title == possibleCourses.ElementAt(i));
-                        cell = sheet.Cells[row, column];
-                        if (course is not null)
-                        {
-                            cell.PutValue(Math.Round(course.Grade, 2));
-                        }
-                        else
-                        {
-                            cell.PutValue(0);
-                        }
-
-                        column++;
-                    }
-
-                    column = 0;
-                    row++;
-                }
-                sheet.AutoFitColumns();
-                workbook.Save(Path.Combine(_appSettings.Path, _appSettings.UnloadSpecializationFileName) + ".xlsx");
-                sheetsIndex++;
-                sheet = workbook.Worksheets[sheetsIndex];
-            }
-            return OperationResult.Success();
-        }
-
-        public async Task<OperationResult> UnloadByCoursesAsync(List<string> courseTitles)
-        {
-            var workbook = new Workbook();
-            var sheet = workbook.Worksheets[0];
-            var row = 0;
-            var column = 0;
-            foreach (var courseTitle in courseTitles)
-            {
-                var getCourses = await _courseRepository.GetByTitleAsync(courseTitle);
-                if (!getCourses.IsSuccess)
-                {
-                    return OperationResult.Error("Ошибка при получении курса с названием " + courseTitle);
-                }
-
-                var courses = getCourses.Data;
-                sheet.Cells[row, column].PutValue("ФИО студента");
-                sheet.Cells[row, column + 1].PutValue(courseTitle);
-                
-                foreach (var course in courses)
-                {
-                    var student = await _studentRepository.GetAsync(course.StudentId);
-                    row += 1;
-                    column = 0;
-                    sheet.Cells[row,column].PutValue(student.Data.FullName);
-                    sheet.Cells[row, column + 1].PutValue(Math.Round(course.Grade, 2));
-                }
-
-                row += 2;
-            }
-            sheet.AutoFitColumns();
-            workbook.Save(Path.Combine(_appSettings.Path, _appSettings.UnloadCoursesFileName) + ".xlsx");
+                await specializationWorksheetAppender.Append(workbook, specializationTitle);
+            
+            workbook.Worksheets.RemoveAt(0);
+            workbook.Save(Path.Combine(_appSettings.Path, _appSettings.UnloadFileName) + ".xlsx");
             return OperationResult.Success();
         }
     }
