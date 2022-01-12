@@ -20,6 +20,7 @@ using Server.Profiles;
 using server.Repository;
 using Server.Repository;
 using Server.Repository.Interfaces;
+using Server.Services;
 using Server.Settings;
 using server.Validators;
 
@@ -79,6 +80,11 @@ namespace Server
             //Настройки
             services
                 .AddTransient<IAppSettings, AppSettings>();
+            
+            //WorksheetAppenders
+            services
+                .AddTransient<CoursesWorksheetAppender>()
+                .AddTransient<SpecializationWorksheetAppender>();
 
             services
                 .AddSingleton<IFileValidator, FileValidator>();
