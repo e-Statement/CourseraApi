@@ -10,8 +10,6 @@
         string CoursesFilePath { get; }
         string AssignmentFileName { get; }
         string AssignmentFilePath { get; }
-        string UnloadSpecializationFileName { get; }
-        string UnloadCoursesFileName { get; }
         string UnloadFileName { get; }
         string FileEncoding { get; }
 
